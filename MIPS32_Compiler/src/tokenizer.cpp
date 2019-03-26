@@ -18,32 +18,34 @@ namespace mips32
   Token extract_label_or_inst( std::string const& file, std::size_t& file_pos ) noexcept;
 
   void skip_whitespace( std::string const& file, std::size_t& file_pos ) noexcept;
-  std::size_t advance( std::string const& file, std::size_t file_pos ) noexcept;
+  std::size_t advance( std::string const& file, std::size_t& file_pos ) noexcept;
   int instruction_offset( std::size_t hash ) noexcept;
 }
 
-mips32::Tokenizer::Tokenizer()
-{
-  tokens.reserve( tok_limit );
-}
-
-bool mips32::Tokenizer::tokenize( char * path ) noexcept
+bool mips32::Tokenizer::load( char * path ) noexcept
 {
   std::ifstream in{ path };
   if ( !in.is_open() )
     return false;
 
+  return load( in );
+}
+
+bool mips32::Tokenizer::load( std::istream & in ) noexcept
+{
   std::stringstream ss;
   ss << in.rdbuf();
 
   file = std::move( ss.str() );
 
-  return true;
+  tokens.reserve( tok_limit );
+
+  return !file.empty();
 }
 
 bool mips32::Tokenizer::has_token() noexcept
 {
-  return file_pos != file.size();
+  return file_pos < file.size() || tok_pos < tokens.size();
 }
 
 bool mips32::Tokenizer::get( Token & tok ) noexcept
@@ -161,10 +163,12 @@ mips32::Token mips32::extract_directive( std::string const& file, std::size_t& f
     },
   };
 
-  auto new_pos = advance( file, file_pos );
+  ++file_pos; // advancing breaks on '.' and a directive starts with it
+  auto old_pos = advance( file, file_pos ) - 1;
 
   Token tok;
-  auto hash = MIPS32_HASH( std::string_view( file.data() + file_pos, new_pos - file_pos ) );
+  auto view = std::string_view( file.data() + old_pos, file_pos - old_pos );
+  auto hash = MIPS32_HASH( view );
 
   auto d_lo_end = dir_hashtable[0].cend();
   auto d_hi_end = dir_hashtable[1].cend();
@@ -229,11 +233,10 @@ mips32::Token mips32::extract_register( std::string const& file, std::size_t& fi
     MIPS32_HASH( "$f28"sv ),MIPS32_HASH( "$f29"sv ),MIPS32_HASH( "$f30"sv ),MIPS32_HASH( "$f31"sv ),
   };
 
-  auto new_pos = advance( file, file_pos );
+  auto old_pos = advance( file, file_pos );
 
-  auto hash = MIPS32_HASH( std::string_view( file.data() + file_pos, new_pos - file_pos ) );
-
-  file_pos = new_pos;
+  auto view = std::string_view( file.data() + old_pos, file_pos - old_pos );
+  auto hash = MIPS32_HASH( view );
 
   Token tok;
 
@@ -266,10 +269,9 @@ mips32::Token mips32::extract_register( std::string const& file, std::size_t& fi
 
 mips32::Token mips32::extract_number( std::string const& file, std::size_t& file_pos ) noexcept
 {
-  auto new_pos = advance( file, file_pos );
+  auto old_pos = advance( file, file_pos );
 
-  auto num_str = file.substr( file_pos, new_pos - file_pos );
-  file_pos = new_pos;
+  auto num_str = file.substr( old_pos, file_pos - old_pos );
 
   // Remove `'` from the number, as it is allowed as separator for us but not for the STL
   num_str.erase( std::remove( num_str.begin(), num_str.end(), '\'' ), num_str.end() );
@@ -279,24 +281,37 @@ mips32::Token mips32::extract_number( std::string const& file, std::size_t& file
 
   Token tok;
 
-  // Hex
-  if ( num_str.size() >= 2 && num_str[0] == '0' && tolower( num_str[1] ) == 'x' )
+  if ( num_str.find( '.' ) != num_str.npos ) // possible floating point
   {
-    if ( num_str.find( '.' ) != num_str.npos ) // possible hexfloat
+    if ( iss >> tok.f64 )
     {
-      if ( iss >> std::hexfloat >> tok.num )
-        tok.type = tok.NUMBER;
-    }
-    else // integer hex
-    {
-      if ( iss >> std::hex >> tok.num )
-        tok.type = tok.NUMBER;
+      tok.type = tok.FLOAT;
+      return tok;
     }
   }
-  else if ( iss >> tok.num )
+
+  // Possible integer
+  int pos = 0;
+  if ( num_str[0] == '+' || num_str[0] == '-' )
   {
-    tok.type = tok.NUMBER;
+    if ( num_str.size() == 1 ) return tok;
+    else pos = 1;
   }
+
+  if ( num_str[pos] == '0' ) // Hex or Oct?
+  {
+    if ( num_str.size() == 1 + pos )
+      tok.u32 = 0;
+    else if ( tolower( num_str[pos + 1] ) == 'x' )
+      iss >> std::hex >> tok.u32; // Base 16
+    else
+      iss >> std::oct >> tok.u32; // Base 8
+  }
+  else
+    iss >> std::dec >> tok.u32;   // Base 10
+
+  if ( iss )
+    tok.type = tok.INTEGER;
 
   return tok;
 }
@@ -327,7 +342,7 @@ mips32::Token mips32::extract_comment( std::string const& file, std::size_t& fil
 
 mips32::Token mips32::extract_string( std::string const& file, std::size_t& file_pos ) noexcept
 {
-  auto new_pos = file_pos;
+  auto new_pos = file_pos + 1;
 
   while ( true )
   {
@@ -336,8 +351,10 @@ mips32::Token mips32::extract_string( std::string const& file, std::size_t& file
     if ( new_pos == file.npos )
       return Token{};
 
-    if ( file[new_pos] != '\\' )
+    if ( file[new_pos - 1] != '\\' ) // check for \" escape
       break;
+    else
+      ++new_pos;
   }
 
   Token tok;
@@ -347,16 +364,16 @@ mips32::Token mips32::extract_string( std::string const& file, std::size_t& file
   tok.str.data = file.data() + file_pos;
   tok.str.size = file.data() + new_pos - tok.str.data;
 
-  file_pos = new_pos;
+  file_pos = new_pos + 1;
 
   return tok;
 }
 
 mips32::Token mips32::extract_label_or_inst( std::string const& file, std::size_t& file_pos ) noexcept
 {
-  auto new_pos = advance( file, file_pos );
+  auto old_pos = advance( file, file_pos );
 
-  auto tok_str = file.substr( file_pos, new_pos - file_pos );
+  auto tok_str = file.substr( old_pos, file_pos - old_pos );
 
   std::size_t normal_hash, uppercase_hash;
 
@@ -369,35 +386,56 @@ mips32::Token mips32::extract_label_or_inst( std::string const& file, std::size_
 
   Token tok;
 
-  tok.hash = normal_hash;
-  tok.code = instruction_offset( uppercase_hash );
-
   if ( tok_str.back() == ':' )
+  {
+    tok.hash = normal_hash;
     tok.type = tok.LABEL_DECL;
-  else if ( tok.code != -1 )
+  }
+  else if ( auto code = instruction_offset( uppercase_hash ); code != -1 )
+  {
+    tok.code = code;
     tok.type = tok.INSTRUCTION;
+  }
   else
+  {
+    tok.hash = normal_hash;
     tok.type = tok.LABEL_REF;
+  }
 
   return tok;
 }
 
 void mips32::skip_whitespace( std::string const & file, std::size_t & file_pos ) noexcept
 {
-  while ( file_pos < file.size()
-          && ( file[file_pos] == ' ' || file[file_pos] == '\t' ) )
+  while ( file_pos < file.size() && ( file[file_pos] == ' ' || file[file_pos] == '\t' ) )
     ++file_pos;
 }
 
-std::size_t mips32::advance( std::string const & file, std::size_t file_pos ) noexcept
+std::size_t mips32::advance( std::string const & file, std::size_t& file_pos ) noexcept
 {
+  auto old_pos = file_pos;
+
   while ( file_pos != file.size() )
   {
-    char c = file[file_pos];
-    if ( c == '\n' || c == ',' || c == ' ' || c == '\t' || c == '(' || c == ')' || c == '.' )
-      return file_pos--;
+    switch ( file[file_pos] )
+    {
+    case ':':
+      ++file_pos; // we need it for the label declaration
+    case '\n':
+    case ',':
+    case ' ':
+    case '\t':
+    case '(':
+    case ')':
+    case '.':
+      goto _exit;
+    }
+
+    ++file_pos;
   }
-  return file_pos;
+
+_exit:
+  return old_pos;
 }
 
 int mips32::instruction_offset( std::size_t hash ) noexcept

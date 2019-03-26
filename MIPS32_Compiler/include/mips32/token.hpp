@@ -19,7 +19,8 @@ struct Token
     INT_REGISTER,
     FLOAT_REGISTER,
     COMMENT,
-    NUMBER,
+    INTEGER,
+    FLOAT,
     STRING,
     COMMA,     // no data
     LEFT_PAR,  // no data
@@ -33,7 +34,8 @@ struct Token
     std::uint32_t reg;
 
     // numbers
-    double num;
+    std::uint32_t u32;
+    double f64;
 
     // label decl/ref
     std::size_t hash;

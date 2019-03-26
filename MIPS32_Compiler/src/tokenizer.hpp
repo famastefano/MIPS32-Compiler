@@ -19,8 +19,6 @@ namespace mips32
 class Tokenizer
 {
 public:
-  Tokenizer();
-
   /*
    * Loads the file into memory,
    * ready to be divided into tokens
@@ -30,7 +28,8 @@ public:
    * returns `true`, if the task succeed
    *         `false` otherwise
    */
-  bool tokenize( char *path ) noexcept;
+  bool load( char *path ) noexcept;
+  bool load( std::istream& in ) noexcept;
 
   /*
    * Check if the file has more tokens to get.
