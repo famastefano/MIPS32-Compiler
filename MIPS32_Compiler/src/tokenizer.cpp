@@ -131,40 +131,40 @@ mips32::Token mips32::extract_directive( std::string const& file, std::size_t& f
 {
   using namespace std::string_view_literals;
 
-  static const std::array<std::size_t, 14> dir_hashtable[2]
+  static const std::array<std::size_t, 14> dir_hashtable_lo
   {
-    {
-      MIPS32_HASH( ".align"sv ),
-      MIPS32_HASH( ".ascii"sv ),
-      MIPS32_HASH( ".asciiz"sv ),
-      MIPS32_HASH( ".byte"sv ),
-      MIPS32_HASH( ".data"sv ),
-      MIPS32_HASH( ".double"sv ),
-      MIPS32_HASH( ".float"sv ),
-      MIPS32_HASH( ".globl"sv ),
-      MIPS32_HASH( ".half"sv ),
-      MIPS32_HASH( ".kdata"sv ),
-      MIPS32_HASH( ".ktext"sv ),
-      MIPS32_HASH( ".space"sv ),
-      MIPS32_HASH( ".text"sv ),
-      MIPS32_HASH( ".word"sv ),
-    },
-    {
-      MIPS32_HASH( ".ALIGN"sv ),
-      MIPS32_HASH( ".ASCII"sv ),
-      MIPS32_HASH( ".ASCIIZ"sv ),
-      MIPS32_HASH( ".BYTE"sv ),
-      MIPS32_HASH( ".DATA"sv ),
-      MIPS32_HASH( ".DOUBLE"sv ),
-      MIPS32_HASH( ".FLOAT"sv ),
-      MIPS32_HASH( ".GLOBL"sv ),
-      MIPS32_HASH( ".HALF"sv ),
-      MIPS32_HASH( ".KDATA"sv ),
-      MIPS32_HASH( ".KTEXT"sv ),
-      MIPS32_HASH( ".SPACE"sv ),
-      MIPS32_HASH( ".TEXT"sv ),
-      MIPS32_HASH( ".WORD"sv )
-    },
+    MIPS32_HASH( ".word"sv ),
+    MIPS32_HASH( ".text"sv ),
+    MIPS32_HASH( ".space"sv ),
+    MIPS32_HASH( ".ktext"sv ),
+    MIPS32_HASH( ".kdata"sv ),
+    MIPS32_HASH( ".half"sv ),
+    MIPS32_HASH( ".globl"sv ),
+    MIPS32_HASH( ".float"sv ),
+    MIPS32_HASH( ".double"sv ),
+    MIPS32_HASH( ".data"sv ),
+    MIPS32_HASH( ".byte"sv ),
+    MIPS32_HASH( ".asciiz"sv ),
+    MIPS32_HASH( ".ascii"sv ),
+    MIPS32_HASH( ".align"sv ),
+
+  };
+  static const std::array<std::size_t, 14> dir_hashtable_hi
+  {
+    MIPS32_HASH( ".WORD"sv ),
+    MIPS32_HASH( ".TEXT"sv ),
+    MIPS32_HASH( ".SPACE"sv ),
+    MIPS32_HASH( ".KTEXT"sv ),
+    MIPS32_HASH( ".KDATA"sv ),
+    MIPS32_HASH( ".HALF"sv ),
+    MIPS32_HASH( ".GLOBL"sv ),
+    MIPS32_HASH( ".FLOAT"sv ),
+    MIPS32_HASH( ".DOUBLE"sv ),
+    MIPS32_HASH( ".DATA"sv ),
+    MIPS32_HASH( ".BYTE"sv ),
+    MIPS32_HASH( ".ASCIIZ"sv ),
+    MIPS32_HASH( ".ASCII"sv ),
+    MIPS32_HASH( ".ALIGN"sv ),
   };
 
   ++file_pos; // advancing breaks on '.' and a directive starts with it
@@ -174,21 +174,21 @@ mips32::Token mips32::extract_directive( std::string const& file, std::size_t& f
   auto view = std::string_view( file.data() + old_pos, file_pos - old_pos );
   auto hash = MIPS32_HASH( view );
 
-  auto d_lo_end = dir_hashtable[0].cend();
-  auto d_hi_end = dir_hashtable[1].cend();
+  auto d_lo_end = dir_hashtable_lo.cend();
+  auto d_hi_end = dir_hashtable_hi.cend();
 
-  auto d_lo = std::find( dir_hashtable[0].cbegin(), d_lo_end, hash );
-  auto d_hi = std::find( dir_hashtable[1].cbegin(), d_hi_end, hash );
+  auto d_lo = std::find( dir_hashtable_lo.cbegin(), d_lo_end, hash );
+  auto d_hi = std::find( dir_hashtable_hi.cbegin(), d_hi_end, hash );
 
   if ( d_lo != d_lo_end )
   {
     tok.type = tok.DIRECTIVE;
-    tok.code = d_lo_end - d_lo;
+    tok.code = d_lo_end - d_lo - 1;
   }
   else if ( d_hi != d_hi_end )
   {
     tok.type = tok.DIRECTIVE;
-    tok.code = d_hi_end - d_hi;
+    tok.code = d_hi_end - d_hi - 1;
   }
 
   return tok;
@@ -428,7 +428,6 @@ std::size_t mips32::advance( std::string const & file, std::size_t& file_pos ) n
     case '\t':
     case '(':
     case ')':
-    case '.':
       goto _exit;
     }
 
@@ -463,12 +462,6 @@ int mips32::instruction_offset( std::size_t hash ) noexcept
     MIPS32_HASH( "BAL" ),
     MIPS32_HASH( "BALC" ),
     MIPS32_HASH( "BC" ),
-    MIPS32_HASH( "BCEQZ" ),
-    MIPS32_HASH( "BCNEZ" ),
-    MIPS32_HASH( "BCF" ),
-    MIPS32_HASH( "BCFL" ),
-    MIPS32_HASH( "BCT" ),
-    MIPS32_HASH( "BCTL" ),
     MIPS32_HASH( "BCEQZ" ),
     MIPS32_HASH( "BCNEZ" ),
     MIPS32_HASH( "BCF" ),
@@ -620,7 +613,6 @@ int mips32::instruction_offset( std::size_t hash ) noexcept
     MIPS32_HASH( "CEIL.W.S" ),
     MIPS32_HASH( "CEIL.W.D" ),
     MIPS32_HASH( "CFC" ),
-    MIPS32_HASH( "CFC" ),
     MIPS32_HASH( "CLASS.S" ),
     MIPS32_HASH( "CLASS.D" ),
     MIPS32_HASH( "CLO" ),
@@ -749,7 +741,6 @@ int mips32::instruction_offset( std::size_t hash ) noexcept
     MIPS32_HASH( "LBU" ),
     MIPS32_HASH( "LBUE" ),
     MIPS32_HASH( "LDC" ),
-    MIPS32_HASH( "LDC" ),
     MIPS32_HASH( "LDXC1" ),
     MIPS32_HASH( "LH" ),
     MIPS32_HASH( "LHE" ),
@@ -763,7 +754,6 @@ int mips32::instruction_offset( std::size_t hash ) noexcept
     MIPS32_HASH( "LUI" ),
     MIPS32_HASH( "LUXC1" ),
     MIPS32_HASH( "LW" ),
-    MIPS32_HASH( "LWC" ),
     MIPS32_HASH( "LWC" ),
     MIPS32_HASH( "LWE" ),
     MIPS32_HASH( "LWL" ),
@@ -830,7 +820,6 @@ int mips32::instruction_offset( std::size_t hash ) noexcept
     MIPS32_HASH( "MTHI" ),
     MIPS32_HASH( "MTLO" ),
     MIPS32_HASH( "MUL" ),
-    MIPS32_HASH( "MUL" ),
     MIPS32_HASH( "MUH" ),
     MIPS32_HASH( "MULU" ),
     MIPS32_HASH( "MUHU" ),
@@ -883,7 +872,6 @@ int mips32::instruction_offset( std::size_t hash ) noexcept
     MIPS32_HASH( "SCWPE" ),
     MIPS32_HASH( "SDBBP" ),
     MIPS32_HASH( "SDC" ),
-    MIPS32_HASH( "SDC" ),
     MIPS32_HASH( "SDXC" ),
     MIPS32_HASH( "SEB" ),
     MIPS32_HASH( "SEH" ),
@@ -918,7 +906,6 @@ int mips32::instruction_offset( std::size_t hash ) noexcept
     MIPS32_HASH( "SUBU" ),
     MIPS32_HASH( "SUXC" ),
     MIPS32_HASH( "SW" ),
-    MIPS32_HASH( "SWC" ),
     MIPS32_HASH( "SWC" ),
     MIPS32_HASH( "SWE" ),
     MIPS32_HASH( "SWL" ),
@@ -962,7 +949,7 @@ int mips32::instruction_offset( std::size_t hash ) noexcept
   auto inst = std::find( inst_hashtable.cbegin(), end, hash );
 
   if ( inst != end )
-    return end - inst;
+    return end - inst - 1;
 
   return -1;
 }
