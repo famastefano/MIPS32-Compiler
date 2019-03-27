@@ -82,6 +82,81 @@ namespace Test
         DebugOut.str(L"");
       }
     }
+
+    TEST_METHOD( TokenizerGet_Registers )
+    {
+      std::istringstream int_reg_as_num, int_reg_coded, float_reg;
+      
+      int_reg_as_num.str(
+        "$0 $1 $2 $3 $4 $5 $6 $7 $8 $9 "
+        "$10 $11 $12 $13 $14 $15 $16 $17 $18 $19 "
+        "$20 $21 $22 $23 $24 $25 $26 $27 $28 $29 "
+        "$30 $31"
+      );
+
+      int_reg_coded.str(
+        "$zero $at $v0 $v1 "
+        "$a0   $a1 $a2 $a3 "
+        "$t0   $t1 $t2 $t3 "
+        "$t4   $t5 $t6 $t7 "
+        "$s0   $s1 $s2 $s3 "
+        "$s4   $s5 $s6 $s7 "
+        "$t8   $t9 $k0 $k1 "
+        "$gp   $sp $s8 $ra"
+      );
+
+      float_reg.str(
+        "$f0 $f1 $f2 $f3 $f4 $f5 $f6 $f7 $f8 $f9 "
+        "$f10 $f11 $f12 $f13 $f14 $f15 $f16 $f17 $f18 $f19 "
+        "$f20 $f21 $f22 $f23 $f24 $f25 $f26 $f27 $f28 $f29 "
+        "$f30 $f31"
+      );
+      
+      mips32::Token tok;
+
+      // Integer Registers as numbers
+      tokenizer.load( int_reg_as_num );
+      for ( int i = 0; i < 32; ++i )
+      {
+        tokenizer.get( tok );
+
+        DebugOut << L"int_reg_as_num #" << ( i + 1 ) << L" invalid type";
+        Assert::IsTrue( tok.type == tok.INT_REGISTER, DebugOut.str().c_str() );
+        DebugOut.str( L"" );
+
+        DebugOut << L"int_reg_as_num #" << ( i + 1 ) << L" wrong number";
+        Assert::IsTrue( tok.reg == std::uint32_t(i), DebugOut.str().c_str() );
+        DebugOut.str( L"" );
+      }
+
+      // Integer Registers encoded
+      tokenizer.load( int_reg_coded );
+      for ( int i = 0; i < 32; ++i )
+      {
+        tokenizer.get( tok );
+
+        DebugOut << L"int_reg_coded #" << ( i + 1 ) << L" invalid type";
+        Assert::IsTrue( tok.type == tok.INT_REGISTER, DebugOut.str().c_str() );
+        DebugOut.str( L"" );
+
+        DebugOut << L"int_reg_coded #" << ( i + 1 ) << L" wrong number";
+        Assert::IsTrue( tok.reg == std::uint32_t( i ), DebugOut.str().c_str() );
+        DebugOut.str( L"" );
+      }
+
+      // Float Registers
+      tokenizer.load( float_reg );
+      for ( int i = 0; i < 32; ++i )
+      {
+        DebugOut << L"float_reg #" << ( i + 1 );
+
+        tokenizer.get( tok );
+        Assert::IsTrue( tok.type == tok.FLOAT_REGISTER, DebugOut.str().c_str() );
+        Assert::IsTrue( tok.reg == std::uint32_t( i ), DebugOut.str().c_str() );
+
+        DebugOut.str( L"" );
+      }
+    }
     
     TEST_METHOD_INITIALIZE( RewindTokenizer )
     {

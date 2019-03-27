@@ -38,7 +38,11 @@ bool mips32::Tokenizer::load( std::istream & in ) noexcept
 
   file = std::move( ss.str() );
 
+  tokens.clear();
   tokens.reserve( tok_limit );
+
+  file_pos = 0;
+  tok_pos = 0;
 
   return !file.empty();
 }
@@ -194,43 +198,40 @@ mips32::Token mips32::extract_register( std::string const& file, std::size_t& fi
 {
   using namespace std::string_view_literals;
 
-  static const std::array<std::size_t, 32> integer_hashtable[2]
+  static const std::array<std::size_t, 32> integer_hashtable_as_num
   {
-    // $0 .. $31
-    {
-      MIPS32_HASH( "$0"sv ),MIPS32_HASH( "$1"sv ),MIPS32_HASH( "$2"sv ),MIPS32_HASH( "$3"sv ),
-      MIPS32_HASH( "$4"sv ),MIPS32_HASH( "$5"sv ),MIPS32_HASH( "$6"sv ),MIPS32_HASH( "$7"sv ),
-      MIPS32_HASH( "$8"sv ),MIPS32_HASH( "$9"sv ),MIPS32_HASH( "$10"sv ),MIPS32_HASH( "$11"sv ),
-      MIPS32_HASH( "$12"sv ),MIPS32_HASH( "$13"sv ),MIPS32_HASH( "$14"sv ),MIPS32_HASH( "$15"sv ),
-      MIPS32_HASH( "$16"sv ),MIPS32_HASH( "$17"sv ),MIPS32_HASH( "$18"sv ),MIPS32_HASH( "$19"sv ),
-      MIPS32_HASH( "$20"sv ),MIPS32_HASH( "$21"sv ),MIPS32_HASH( "$22"sv ),MIPS32_HASH( "$23"sv ),
-      MIPS32_HASH( "$24"sv ),MIPS32_HASH( "$25"sv ),MIPS32_HASH( "$26"sv ),MIPS32_HASH( "$27"sv ),
-      MIPS32_HASH( "$28"sv ),MIPS32_HASH( "$29"sv ),MIPS32_HASH( "$30"sv ),MIPS32_HASH( "$31"sv ),
-    },
+    MIPS32_HASH( "$31"sv ),MIPS32_HASH( "$30"sv ),MIPS32_HASH( "$29"sv ),MIPS32_HASH( "$28"sv ),
+    MIPS32_HASH( "$27"sv ),MIPS32_HASH( "$26"sv ),MIPS32_HASH( "$25"sv ),MIPS32_HASH( "$24"sv ),
+    MIPS32_HASH( "$23"sv ),MIPS32_HASH( "$22"sv ),MIPS32_HASH( "$21"sv ),MIPS32_HASH( "$20"sv ),
+    MIPS32_HASH( "$19"sv ),MIPS32_HASH( "$18"sv ),MIPS32_HASH( "$17"sv ),MIPS32_HASH( "$16"sv ),
+    MIPS32_HASH( "$15"sv ),MIPS32_HASH( "$14"sv ),MIPS32_HASH( "$13"sv ),MIPS32_HASH( "$12"sv ),
+    MIPS32_HASH( "$11"sv ),MIPS32_HASH( "$10"sv ),MIPS32_HASH( "$9"sv ),MIPS32_HASH( "$8"sv ),
+    MIPS32_HASH( "$7"sv ),MIPS32_HASH( "$6"sv ),MIPS32_HASH( "$5"sv ),MIPS32_HASH( "$4"sv ),
+    MIPS32_HASH( "$3"sv ),MIPS32_HASH( "$2"sv ),MIPS32_HASH( "$1"sv ),MIPS32_HASH( "$0"sv ),
+  };
 
-    // Like above but following human readable convention
-    {
-      MIPS32_HASH( "$zero"sv ),MIPS32_HASH( "$at"sv ),MIPS32_HASH( "$v0"sv ),MIPS32_HASH( "$v1"sv ),
-      MIPS32_HASH( "$a0"sv ),MIPS32_HASH( "$a1"sv ),MIPS32_HASH( "$a2"sv ),MIPS32_HASH( "$a3"sv ),
-      MIPS32_HASH( "$t0"sv ),MIPS32_HASH( "$t1"sv ),MIPS32_HASH( "$t2"sv ),MIPS32_HASH( "$t3"sv ),
-      MIPS32_HASH( "$t4"sv ),MIPS32_HASH( "$t5"sv ),MIPS32_HASH( "$t6"sv ),MIPS32_HASH( "$t7"sv ),
-      MIPS32_HASH( "$s0"sv ),MIPS32_HASH( "$s1"sv ),MIPS32_HASH( "$s2"sv ),MIPS32_HASH( "$s3"sv ),
-      MIPS32_HASH( "$s4"sv ),MIPS32_HASH( "$s5"sv ),MIPS32_HASH( "$s6"sv ),MIPS32_HASH( "$s7"sv ),
-      MIPS32_HASH( "$t8"sv ),MIPS32_HASH( "$t9"sv ),MIPS32_HASH( "$k0"sv ),MIPS32_HASH( "$k1"sv ),
-      MIPS32_HASH( "$gp"sv ),MIPS32_HASH( "$sp"sv ),MIPS32_HASH( "$s8"sv ),MIPS32_HASH( "$ra"sv ),
-    }
+  static const std::array<std::size_t, 32> integer_hashtable_as_string
+  {
+    MIPS32_HASH( "$ra"sv ),MIPS32_HASH( "$s8"sv ),MIPS32_HASH( "$sp"sv ),MIPS32_HASH( "$gp"sv ),
+    MIPS32_HASH( "$k1"sv ),MIPS32_HASH( "$k0"sv ),MIPS32_HASH( "$t9"sv ),MIPS32_HASH( "$t8"sv ),
+    MIPS32_HASH( "$s7"sv ),MIPS32_HASH( "$s6"sv ),MIPS32_HASH( "$s5"sv ),MIPS32_HASH( "$s4"sv ),
+    MIPS32_HASH( "$s3"sv ),MIPS32_HASH( "$s2"sv ),MIPS32_HASH( "$s1"sv ),MIPS32_HASH( "$s0"sv ),
+    MIPS32_HASH( "$t7"sv ),MIPS32_HASH( "$t6"sv ),MIPS32_HASH( "$t5"sv ),MIPS32_HASH( "$t4"sv ),
+    MIPS32_HASH( "$t3"sv ),MIPS32_HASH( "$t2"sv ),MIPS32_HASH( "$t1"sv ),MIPS32_HASH( "$t0"sv ),
+    MIPS32_HASH( "$a3"sv ),MIPS32_HASH( "$a2"sv ),MIPS32_HASH( "$a1"sv ),MIPS32_HASH( "$a0"sv ),
+    MIPS32_HASH( "$v1"sv ),MIPS32_HASH( "$v0"sv ),MIPS32_HASH( "$at"sv ),MIPS32_HASH( "$zero"sv ),
   };
 
   static const std::array<std::size_t, 32> float_hashtable
   {
-    MIPS32_HASH( "$f0"sv ),MIPS32_HASH( "$f1"sv ),MIPS32_HASH( "$f2"sv ),MIPS32_HASH( "$f3"sv ),
-    MIPS32_HASH( "$f4"sv ),MIPS32_HASH( "$f5"sv ),MIPS32_HASH( "$f6"sv ),MIPS32_HASH( "$f7"sv ),
-    MIPS32_HASH( "$f8"sv ),MIPS32_HASH( "$f9"sv ),MIPS32_HASH( "$f10"sv ),MIPS32_HASH( "$f11"sv ),
-    MIPS32_HASH( "$f12"sv ),MIPS32_HASH( "$f13"sv ),MIPS32_HASH( "$f14"sv ),MIPS32_HASH( "$f15"sv ),
-    MIPS32_HASH( "$f16"sv ),MIPS32_HASH( "$f17"sv ),MIPS32_HASH( "$f18"sv ),MIPS32_HASH( "$f19"sv ),
-    MIPS32_HASH( "$f20"sv ),MIPS32_HASH( "$f21"sv ),MIPS32_HASH( "$f22"sv ),MIPS32_HASH( "$f23"sv ),
-    MIPS32_HASH( "$f24"sv ),MIPS32_HASH( "$f25"sv ),MIPS32_HASH( "$f26"sv ),MIPS32_HASH( "$f27"sv ),
-    MIPS32_HASH( "$f28"sv ),MIPS32_HASH( "$f29"sv ),MIPS32_HASH( "$f30"sv ),MIPS32_HASH( "$f31"sv ),
+    MIPS32_HASH( "$f31"sv ),MIPS32_HASH( "$f30"sv ),MIPS32_HASH( "$f29"sv ),MIPS32_HASH( "$f28"sv ),
+    MIPS32_HASH( "$f27"sv ),MIPS32_HASH( "$f26"sv ),MIPS32_HASH( "$f25"sv ),MIPS32_HASH( "$f24"sv ),
+    MIPS32_HASH( "$f23"sv ),MIPS32_HASH( "$f22"sv ),MIPS32_HASH( "$f21"sv ),MIPS32_HASH( "$f20"sv ),
+    MIPS32_HASH( "$f19"sv ),MIPS32_HASH( "$f18"sv ),MIPS32_HASH( "$f17"sv ),MIPS32_HASH( "$f16"sv ),
+    MIPS32_HASH( "$f15"sv ),MIPS32_HASH( "$f14"sv ),MIPS32_HASH( "$f13"sv ),MIPS32_HASH( "$f12"sv ),
+    MIPS32_HASH( "$f11"sv ),MIPS32_HASH( "$f10"sv ),MIPS32_HASH( "$f9"sv ),MIPS32_HASH( "$f8"sv ),
+    MIPS32_HASH( "$f7"sv ),MIPS32_HASH( "$f6"sv ),MIPS32_HASH( "$f5"sv ),MIPS32_HASH( "$f4"sv ),
+    MIPS32_HASH( "$f3"sv ),MIPS32_HASH( "$f2"sv ),MIPS32_HASH( "$f1"sv ),MIPS32_HASH( "$f0"sv ),
   };
 
   auto old_pos = advance( file, file_pos );
@@ -240,28 +241,28 @@ mips32::Token mips32::extract_register( std::string const& file, std::size_t& fi
 
   Token tok;
 
-  auto n_end = integer_hashtable[0].cend();
-  auto h_end = integer_hashtable[1].cend();
+  auto n_end = integer_hashtable_as_num.cend();
+  auto h_end = integer_hashtable_as_string.cend();
   auto f_end = float_hashtable.cend();
 
-  auto n_reg = std::find( integer_hashtable[0].cbegin(), n_end, hash );
-  auto h_reg = std::find( integer_hashtable[1].cbegin(), h_end, hash );
+  auto n_reg = std::find( integer_hashtable_as_num.cbegin(), n_end, hash );
+  auto h_reg = std::find( integer_hashtable_as_string.cbegin(), h_end, hash );
   auto f_reg = std::find( float_hashtable.cbegin(), f_end, hash );
 
   if ( n_reg != n_end )
   {
     tok.type = tok.INT_REGISTER;
-    tok.reg = n_end - n_reg;
+    tok.reg = n_end - n_reg - 1;
   }
   else if ( h_reg != h_end )
   {
     tok.type = tok.INT_REGISTER;
-    tok.reg = h_end - h_reg;
+    tok.reg = h_end - h_reg - 1;
   }
   else if ( f_reg != f_end )
   {
     tok.type = tok.FLOAT_REGISTER;
-    tok.reg = f_end - f_reg;
+    tok.reg = f_end - f_reg - 1;
   }
   
   return tok;
